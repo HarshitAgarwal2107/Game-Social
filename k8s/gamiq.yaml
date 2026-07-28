@@ -27,6 +27,10 @@ spec:
           env:
             - name: REDIS_URL
               value: "redis://redis.gamesocial.svc.cluster.local:6379/0"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
           volumeMounts:
             - name: gamiq-artifacts
               mountPath: /app/recommender/artifacts

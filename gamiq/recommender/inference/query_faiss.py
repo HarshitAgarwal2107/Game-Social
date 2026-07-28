@@ -5,6 +5,7 @@ from psycopg2.pool import ThreadedConnectionPool
 import math
 import time
 import logging
+import threading
 
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.inference.reranker import rerank
@@ -13,6 +14,8 @@ from recommender.cache import get_cached, set_cached
 
 logger = logging.getLogger(__name__)
 
+FAISS_INDEX_PATH = str(ARTIFACTS_DIR / "faiss_index.ivf")
+
 # -------------------- DB CONNECTION POOL --------------------
 
 _db_pool = None
@@ -20,6 +23,15 @@ _db_pool = None
 # -------------------- FAISS --------------------
 
 _index = None
+_index_lock = threading.Lock()
+
+
+def _set_nprobe(index):
+    try:
+        ivf_index = faiss.downcast_index(index.index)
+        ivf_index.nprobe = 256
+    except Exception as e:
+        logger.warning("Could not set nprobe: %s", e)
 
 
 def _ensure_loaded():
@@ -33,13 +45,33 @@ def _ensure_loaded():
         **DB_CONFIG
     )
 
-    _index = faiss.read_index(str(ARTIFACTS_DIR / "faiss_index.ivf"))
+    _index = faiss.read_index(FAISS_INDEX_PATH)
+    _set_nprobe(_index)
 
-    try:
-        ivf_index        = faiss.downcast_index(_index.index)
-        ivf_index.nprobe = 256
-    except Exception as e:
-        logger.warning("Could not set nprobe: %s", e)
+
+def append_and_persist(ids, vectors):
+    _ensure_loaded()
+    vecs = np.array(vectors, dtype="float32")
+    faiss.normalize_L2(vecs)
+    id_arr = np.array(ids, dtype="int64")
+
+    with _index_lock:
+        _index.add_with_ids(vecs, id_arr)
+        faiss.write_index(_index, FAISS_INDEX_PATH)
+
+    logger.info("FAISS updated — added %d vectors, total %d", len(ids), _index.ntotal)
+
+
+def reload_index():
+    global _index
+    with _index_lock:
+        new_index = faiss.read_index(FAISS_INDEX_PATH)
+        _set_nprobe(new_index)
+        _index = new_index
+
+    ntotal = _index.ntotal
+    logger.info("Index reloaded — total vectors: %d", ntotal)
+    return ntotal
 
 
 # -------------------- TEXT BUILD --------------------
@@ -159,6 +191,7 @@ def score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_g
     min_faiss_score = min(faiss_scores_dict.values()) if faiss_scores_dict else 0.0
 
     ranked = []
+    score_breakdowns = {}
 
     for cand_id in (c["game_id"] for c in reranked):
         if cand_id not in game_meta:
@@ -199,9 +232,15 @@ def score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_g
         )
 
         ranked.append((cand_id, final_score))
+        score_breakdowns[cand_id] = {
+            "faiss_score": round(faiss_score, 4),
+            "reranker_score": round(reranker_score, 4),
+            "genre_overlap": round(genre_overlap, 4),
+            "final_score": round(final_score, 4),
+        }
 
     ranked.sort(key=lambda x: x[1], reverse=True)
-    return ranked
+    return ranked, score_breakdowns
 
 
 def apply_filters(ranked, game_meta, series_ids, query_name, query_genres,
@@ -259,12 +298,13 @@ def apply_filters(ranked, game_meta, series_ids, query_name, query_genres,
 
 # -------------------- RECOMMENDATION --------------------
 
-def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
+def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3, include_scores: bool = False):
 
-    cached = get_cached(game_id, k, max_per_series)
-    if cached is not None:
-        logger.info("Cache HIT for game_id=%s", game_id)
-        return cached
+    if not include_scores:
+        cached = get_cached(game_id, k, max_per_series)
+        if cached is not None:
+            logger.info("Cache HIT for game_id=%s", game_id)
+            return cached
 
     _ensure_loaded()
     t0 = time.perf_counter()
@@ -277,7 +317,8 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     if query is None:
         return []
 
-    scores, returned_ids = _index.search(query, 500)
+    with _index_lock:
+        scores, returned_ids = _index.search(query, 500)
 
     faiss_candidates = []
     faiss_scores_dict = {}
@@ -377,7 +418,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
 
     # ---- QUALITY SCORING + FILTERING ----
 
-    ranked = score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_genres)
+    ranked, score_breakdowns = score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_genres)
     result = apply_filters(ranked, game_meta, series_ids, query_name, query_genres, k, max_per_series)
 
     t5 = time.perf_counter()
@@ -385,4 +426,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     logger.info("TOTAL: %.2fs", t5 - t0)
 
     set_cached(game_id, k, max_per_series, result)
+
+    if include_scores:
+        return {"ids": result, "scores": {gid: score_breakdowns[gid] for gid in result if gid in score_breakdowns}}
     return result

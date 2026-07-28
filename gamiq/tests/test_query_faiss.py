@@ -35,7 +35,7 @@ def test_scoring_formula_exact():
     weights = {"reranker": 0.45, "faiss": 0.25, "genre": 0.10,
                "rating": 0.10, "metacritic": 0.05, "popularity": 0.05}
 
-    ranked = score_candidates(reranked, game_meta, faiss_scores, set(), query_genres, weights=weights)
+    ranked, _ = score_candidates(reranked, game_meta, faiss_scores, set(), query_genres, weights=weights)
 
     reranker = 1 / (1 + math.exp(-2.0))
     expected = (0.45 * reranker +
@@ -61,7 +61,7 @@ def test_scoring_sorts_descending():
     ]
     faiss_scores = {1: 0.9, 2: 0.3}
 
-    ranked = score_candidates(reranked, game_meta, faiss_scores, set(), set())
+    ranked, _ = score_candidates(reranked, game_meta, faiss_scores, set(), set())
 
     assert ranked[0][0] == 1
     assert ranked[1][0] == 2
@@ -75,7 +75,7 @@ def test_scoring_skips_missing_game_meta():
         {"game_id": 999, "reranker_score": 5.0},
     ]
 
-    ranked = score_candidates(reranked, game_meta, {1: 0.5}, set(), set())
+    ranked, _ = score_candidates(reranked, game_meta, {1: 0.5}, set(), set())
 
     assert len(ranked) == 1
     assert ranked[0][0] == 1
@@ -95,7 +95,7 @@ def test_faiss_imputation_series_gets_batch_min():
     faiss_scores = {1: 0.7}
     series_ids = {2}
 
-    ranked = score_candidates(reranked, game_meta, faiss_scores, series_ids, set())
+    ranked, _ = score_candidates(reranked, game_meta, faiss_scores, series_ids, set())
 
     scores = {r[0]: r[1] for r in ranked}
     assert abs(scores[1] - scores[2]) < 1e-9
@@ -114,7 +114,7 @@ def test_faiss_imputation_non_series_gets_zero():
     weights = {"reranker": 0.45, "faiss": 0.25, "genre": 0.10,
                "rating": 0.10, "metacritic": 0.05, "popularity": 0.05}
 
-    ranked = score_candidates(reranked, game_meta, faiss_scores, set(), set(), weights=weights)
+    ranked, _ = score_candidates(reranked, game_meta, faiss_scores, set(), set(), weights=weights)
 
     scores = {r[0]: r[1] for r in ranked}
     assert scores[1] > scores[2]

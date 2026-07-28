@@ -2,11 +2,12 @@ import os
 import time
 import json
 import logging
+import socket
 import psycopg2
-import numpy as np
-import faiss
+import requests as http_requests
 from datetime import datetime, timedelta, timezone
 from recommender.embedder import encode_texts
+from recommender.inference.query_faiss import append_and_persist
 from psycopg2.extras import execute_values
 from pgvector.psycopg2 import register_vector
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,7 +22,6 @@ logger = logging.getLogger(__name__)
 # -------------------- ENV CONFIG ----------------------------
 # ============================================================
 
-FAISS_INDEX_PATH       = ARTIFACTS_DIR / "faiss_index.ivf"
 CHECKPOINT_PATH        = ARTIFACTS_DIR / "checkpoint.txt"
 UPDATED_CHECKPOINT_PATH = ARTIFACTS_DIR / "updated_checkpoint.txt"
 LOCK_FILE_PATH = ARTIFACTS_DIR / "pipeline.lock"
@@ -306,33 +306,42 @@ def fetch_game_details(game_id):
     return response.json()
 
 # ============================================================
-# -------------------- FAISS UPDATE --------------------------
+# -------------------- POD RELOAD ----------------------------
 # ============================================================
 
-def update_faiss(new_ids: list, new_vectors: list):
-    """
-    Appends new game vectors to existing FAISS index and npy files.
-    Vectors are normalized before adding — matches train_faiss.py behavior.
-    Note: vectors added after IVF training go to flat overflow.
-    For small daily additions this is acceptable.
-    Full rebuild should be triggered periodically via train_faiss.py.
-    """
+HEADLESS_SVC = "gamiq-headless.gamesocial.svc.cluster.local"
+PIPELINE_API_KEY = os.getenv("PIPELINE_API_KEY", "")
 
-    if not FAISS_INDEX_PATH.exists():
-        logger.info("FAISS index missing — skipping FAISS update")
+
+def _get_own_ip():
+    pod_ip = os.getenv("POD_IP")
+    if pod_ip:
+        return pod_ip
+    try:
+        return socket.gethostbyname(socket.gethostname())
+    except socket.error:
+        return None
+
+
+def _reload_all_pods():
+    try:
+        results = socket.getaddrinfo(HEADLESS_SVC, 8000, socket.AF_INET, socket.SOCK_STREAM)
+        pod_ips = list({r[4][0] for r in results})
+    except socket.gaierror:
+        logger.info("DNS lookup for %s failed — not in K8s, skipping pod reload", HEADLESS_SVC)
         return
 
-    index = faiss.read_index(str(FAISS_INDEX_PATH))
+    own_ip = _get_own_ip()
+    headers = {"Authorization": f"Bearer {PIPELINE_API_KEY}"}
 
-    logger.info("Updating FAISS index...")
-    vectors = np.array(new_vectors, dtype="float32")
-    faiss.normalize_L2(vectors)
-    ids = np.array(new_ids, dtype="int64")
-
-    # IndexIDMap wraps inner IVFFlat — add_with_ids works correctly on IDMap
-    index.add_with_ids(vectors, ids)
-    faiss.write_index(index, str(FAISS_INDEX_PATH))
-    logger.info("FAISS updated — added %d vectors", len(new_ids))
+    for ip in pod_ips:
+        if ip == own_ip:
+            continue
+        try:
+            resp = http_requests.post(f"http://{ip}:8000/internal/reload-index", headers=headers, timeout=30)
+            logger.info("Reload %s: %s %s", ip, resp.status_code, resp.text)
+        except Exception:
+            logger.warning("Failed to reload pod %s — will pick up new index on restart", ip)
 
 # ============================================================
 # -------------------- SINGLE GAME ENSURE --------------------
@@ -396,7 +405,8 @@ def ensure_game(rawg_id: int) -> dict:
                         series_rows.append((mid, rawg_id))
                     insert_series_batch(conn, series_rows)
 
-        update_faiss([rawg_id], [embedding[0]])
+        append_and_persist([rawg_id], [embedding[0]])
+        _reload_all_pods()
         clear_recommendation_cache()
         return {"status": "created", "name": g.get("name")}
 
@@ -462,6 +472,9 @@ def run_daily_pipeline():
 
         new_ids, first_id = fetch_new_game_ids(checkpoint_id)
 
+        all_faiss_ids = []
+        all_faiss_vectors = []
+
         if not new_ids:
             logger.info("No new games")
         else:
@@ -517,9 +530,6 @@ def run_daily_pipeline():
 
             # -------- Process in chunks --------
             valid_ids = [gid for gid in ordered_ids if gid in games]
-
-            all_faiss_ids     = []
-            all_faiss_vectors = []
 
             for i in range(0, len(valid_ids), CHUNK_SIZE):
                 chunk_ids = valid_ids[i:i + CHUNK_SIZE]
@@ -585,16 +595,6 @@ def run_daily_pipeline():
 
                 logger.info("Committed chunk %d: %d games", i // CHUNK_SIZE + 1, len(chunk_ids))
 
-            # -------- Single FAISS update (prevents duplicate IDs on crash) --------
-            try:
-                if all_faiss_ids:
-                    update_faiss(all_faiss_ids, all_faiss_vectors)
-            except Exception:
-                logger.exception("Pass 1 FAISS update failed")
-
-            if first_id is not None:
-                save_checkpoint(first_id)
-
         # ============================================================
         # -------- PASS 2: Updated games (ordering=-updated) --------
         # ============================================================
@@ -632,9 +632,6 @@ def run_daily_pipeline():
                         updated_games[gid] = result
 
             logger.info("Fetched %d updated game details", len(updated_games))
-
-            upd_faiss_ids = []
-            upd_faiss_vectors = []
 
             for i in range(0, len(updated_ids), CHUNK_SIZE):
                 chunk_ids = [gid for gid in updated_ids[i:i + CHUNK_SIZE] if gid in updated_games]
@@ -693,20 +690,24 @@ def run_daily_pipeline():
                     ]
                     insert_embeddings_batch(conn, embedding_rows)
 
-                    upd_faiss_ids.extend(re_embed_ids)
-                    upd_faiss_vectors.extend(list(embeddings))
+                    all_faiss_ids.extend(re_embed_ids)
+                    all_faiss_vectors.extend(list(embeddings))
 
                 logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
-
-            try:
-                if upd_faiss_ids:
-                    update_faiss(upd_faiss_ids, upd_faiss_vectors)
-            except Exception:
-                logger.exception("Pass 2 FAISS update failed")
 
         else:
             logger.info("No updated games found")
 
+        # ============================================================
+        # -------- Combined FAISS update + checkpoint save -----------
+        # ============================================================
+
+        if all_faiss_ids:
+            append_and_persist(all_faiss_ids, all_faiss_vectors)
+            _reload_all_pods()
+
+        if first_id is not None:
+            save_checkpoint(first_id)
         save_updated_checkpoint(today)
 
         try:

@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from recommender.api import router as recommender_router
 from recommender.daily_pipeline import run_daily_pipeline, ensure_game
+from recommender.inference.query_faiss import reload_index
+from chatbot.chatbot_api import router as chatbot_router
 
 
 class JSONFormatter(logging.Formatter):
@@ -57,7 +59,7 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -118,4 +120,22 @@ async def ensure_game_endpoint(rawg_id: int, request: Request):
         return JSONResponse(status_code=500, content={"error": "Failed to ensure game"})
 
 
+@app.post("/internal/reload-index")
+async def reload_index_endpoint(request: Request):
+    if not PIPELINE_API_KEY:
+        return JSONResponse(status_code=503, content={"error": "Pipeline auth not configured"})
+
+    auth = request.headers.get("Authorization")
+    if auth != f"Bearer {PIPELINE_API_KEY}":
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        ntotal = reload_index()
+        return {"status": "reloaded", "ntotal": ntotal}
+    except Exception as e:
+        logger.error("reload_index failed: %s", e)
+        return JSONResponse(status_code=500, content={"error": "Failed to reload index"})
+
+
 app.include_router(recommender_router)
+app.include_router(chatbot_router)
