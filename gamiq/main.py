@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from recommender.api import router as recommender_router
 from recommender.daily_pipeline import run_daily_pipeline, ensure_game
 from recommender.inference.query_faiss import reload_index
-from chatbot.chatbot_api import router as chatbot_router
 
 
 class JSONFormatter(logging.Formatter):
@@ -138,4 +137,3 @@ async def reload_index_endpoint(request: Request):
 
 
 app.include_router(recommender_router)
-app.include_router(chatbot_router)
