@@ -208,3 +208,6 @@ jobs:
             kubectl rollout status deployment frontend -n gamesocial --timeout=300s
             kubectl rollout status deployment backend -n gamesocial --timeout=300s
             kubectl rollout status deployment gamiq -n gamesocial --timeout=300s
+            
+            # Prune dangling container images to prevent disk bloat
+            sudo crictl rmi $(sudo crictl images -q --filter dangling=true) || true
