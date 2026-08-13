@@ -114,6 +114,7 @@ jobs:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USER }}
           key: ${{ secrets.OCI_SSH_KEY }}
+          command_timeout: 20m
           script: |
             # Create namespaces if they don't exist
             kubectl create namespace gamesocial --dry-run=client -o yaml | kubectl apply -f -
