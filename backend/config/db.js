@@ -14,9 +14,7 @@ const connectDB = async () => {
     // PostgreSQL
     pgPool = new Pool({
   connectionString: process.env.POSTGRES_URI,
-  ssl: {
-    rejectUnauthorized: false
-  }
+  ssl: process.env.PG_SSL === 'true' ? { rejectUnauthorized: false } : false
 });
 
     const pgClient = await pgPool.connect();
