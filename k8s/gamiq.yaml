@@ -4,7 +4,7 @@ metadata:
   name: gamiq
   namespace: gamesocial
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: gamiq
@@ -36,11 +36,11 @@ spec:
               mountPath: /app/recommender/artifacts
           resources:
             requests:
-              memory: "400Mi"
-              cpu: "200m"
-            limits:
               memory: "4Gi"
-              cpu: "1000m"
+              cpu: "1"
+            limits:
+              memory: "7Gi"
+              cpu: "2"
       volumes:
         - name: gamiq-artifacts
           persistentVolumeClaim:
