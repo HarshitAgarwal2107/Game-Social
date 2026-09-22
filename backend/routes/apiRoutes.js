@@ -384,7 +384,11 @@ router.get("/new-releases", async (req, res) => {
         id,
         name,
         background_image,
-        released
+        released,
+        genres,
+        platforms,
+        metacritic,
+        rating
       FROM games
       WHERE released IS NOT NULL
         AND released <= CURRENT_DATE
@@ -401,7 +405,11 @@ router.get("/new-releases", async (req, res) => {
         id: r.id,
         title: r.name,
         background_image: r.background_image,
-        released: r.released
+        released: r.released,
+        genres: r.genres,
+        platforms: r.platforms,
+        metacritic: r.metacritic,
+        rating: r.rating
       }))
     );
   } catch (err) {
@@ -437,7 +445,11 @@ router.get("/gsrecommended", async (req, res) => {
         id,
         name,
         background_image,
-        released
+        released,
+        genres,
+        platforms,
+        metacritic,
+        rating
       FROM games
       WHERE id = ANY($1)
         AND background_image IS NOT NULL
@@ -451,7 +463,11 @@ router.get("/gsrecommended", async (req, res) => {
         id: r.id,
         title: r.name,
         background_image: r.background_image,
-        released: r.released
+        released: r.released,
+        genres: r.genres,
+        platforms: r.platforms,
+        metacritic: r.metacritic,
+        rating: r.rating
       }))
     );
   } catch (err) {

@@ -75,6 +75,20 @@
   transform: translateY(-50%) translateX(0);
 }
 
+/* Hidden labels must not catch clicks. Layout.module.css forces
+   pointer-events: auto on every sidebar descendant, so at opacity 0 these
+   still sat invisibly over the page (x 58-102) and swallowed clicks on
+   whatever was underneath. Two-class selectors so they win over that rule
+   regardless of stylesheet order; the label becomes clickable again while
+   its button is hovered, so its text still works as part of the button. */
+.hoverBtn .label {
+  pointer-events: none;
+}
+
+.hoverBtn:hover .label {
+  pointer-events: auto;
+}
+
 .hoverBtn:global(.active) {
   background: rgba(90, 160, 255, 0.35);
   color: #ffffff;

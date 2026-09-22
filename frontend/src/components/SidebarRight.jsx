@@ -6,7 +6,7 @@ const POLL_INTERVAL = 8000;
 
 export default function SidebarRight() {
   const [notifications, setNotifications] = useState([]);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const lastIdsRef = useRef([]);
 

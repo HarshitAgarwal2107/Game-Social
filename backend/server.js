@@ -31,6 +31,7 @@ import { startRawgCron } from "./cron/rawg_games.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
+import heroRoutes from "./routes/heroRoutes.js";
 
 dotenv.config();
 
@@ -117,13 +118,20 @@ import profileRoutes from "./routes/profile.js";
 app.use("/api/profile", profileRoutes);
 
 app.use("/auth", authRoutes);
-app.use("/api", apiLimiter, apiRoutes);
+
+// Specific /api/<sub> routers must be mounted BEFORE the general /api mount:
+// app.use("/api", ...) matches every /api sub-path and calls next() even when
+// apiRoutes has no handler for it, so mounting it first would make every
+// request below also consume an apiLimiter token on top of its own limiter.
 app.use("/api/gameLookup", gameLookup);
 app.use("/api/trending", trending);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/hero", heroRoutes);
 app.use("/api/friends", friendRoutes);
+
+app.use("/api", apiLimiter, apiRoutes);
 
 app.get("/", (req, res) => {
   res.json({

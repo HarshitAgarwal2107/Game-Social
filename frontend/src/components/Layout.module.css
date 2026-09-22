@@ -87,7 +87,10 @@ body {
 .mainScrollable {
   height: 100vh;
   overflow-y: auto;
-  padding: 24px;
+  /* No padding: routes get the whole viewport and own their internal
+     spacing. Every page already sets its own (or centres itself with
+     max-width), so nothing here relies on the shell for breathing room. */
+  padding: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -110,9 +113,5 @@ body {
 
   .leftFloatZone {
     width: 100%;
-  }
-
-  .mainScrollable {
-    padding: 16px;
   }
 }

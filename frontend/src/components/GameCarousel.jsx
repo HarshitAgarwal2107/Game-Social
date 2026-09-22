@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { normalizeGames } from "../utils/normalizeGames";
 import { useCarouselScroll } from "../hooks/useCarouselScroll";
+import GameCard from "./GameCard";
 import styles from "./GameCarousel.module.css";
 
 export default function GameCarousel({
@@ -10,6 +11,7 @@ export default function GameCarousel({
   badgeText = null,
   showHero = false,
   renderSubtitle = null,
+  renderDateTag = null,
   limit = 10,
 }) {
   const navigate = useNavigate();
@@ -81,35 +83,34 @@ export default function GameCarousel({
       {rest.length > 0 && (
         <div>
           <h2 className={styles.sectionTitle}>{title}</h2>
-          <div
-            className={styles.carousel}
-            ref={carouselRef}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
-          >
-            {rest.map((item) => (
-              <div
-                key={item.id}
-                className={styles.tile}
-                onClick={() => openGame(item)}
-              >
-                <div className={styles.thumb}>
-                  {item.cover ? (
-                    <img src={item.cover} alt={item.title} />
-                  ) : (
-                    <div className={styles.noimg}>No image</div>
-                  )}
-                </div>
-                <div className={styles.meta}>
-                  <div className={styles.title}>{item.title}</div>
-                  {renderSubtitle && (
-                    <div className={`${styles.sub} ${styles.muted}`}>
-                      {renderSubtitle(item)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className={styles.rowWrap}>
+            <div
+              className={styles.carousel}
+              ref={carouselRef}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
+              {rest.map((item) => (
+                <GameCard
+                  key={item.id}
+                  game={item}
+                  subtitle={renderSubtitle ? renderSubtitle(item) : null}
+                  dateTag={renderDateTag ? renderDateTag(item) : null}
+                  onOpen={() => openGame(item)}
+                />
+              ))}
+            </div>
+
+            {/* Progressive blur under the left sidebar only. Four stacked
+                layers of increasing radius: a single layer can only fade its
+                own opacity, which blends a full-strength blur with the sharp
+                image underneath and reads as ghosting, not as a ramp. */}
+            <div className={styles.edge} aria-hidden="true">
+              <span className={styles.blur1} />
+              <span className={styles.blur2} />
+              <span className={styles.blur3} />
+              <span className={styles.blur4} />
+            </div>
           </div>
         </div>
       )}
