@@ -13,17 +13,8 @@
   margin-bottom: 28px;
 }
 
-/* Same kicker as "TRENDING ON STEAM". */
-.kicker {
-  font-size: 11px;
-  font-weight: var(--weight-semibold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.45);
-}
-
 .title {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: clamp(24px, 2.2vw, 34px);
   font-weight: var(--weight-bold);
   line-height: 1.25;
@@ -32,6 +23,12 @@
 
 .query {
   color: #fff;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
 }
 
 .meta {
@@ -54,8 +51,31 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
 }
 
-.count {
+/* Platform filters, below the genres, as the same logos the cards use. */
+.platforms {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 0;
+  /* Indented by the tag's side padding (.filterTag: 7px) so the first logo
+     lines up with the genre text; the tag's own outline is too faint to
+     read as the edge. */
+  padding: 0 0 0 7px;
+  list-style: none;
+}
+
+.platforms li {
+  display: flex;
+  color: rgba(241, 245, 249, 0.82);
+}
+
+/* Extra space only after tags; with none (a text-only search) the count
+   starts flush with the heading. */
+.filterTag + .count {
   margin-left: 6px;
+}
+
+.count {
   font-size: var(--text-sm);
   color: var(--color-text-tertiary);
 }
@@ -84,10 +104,13 @@
   margin-top: -1px;
 }
 
-/* Grows to fill the screen, so the footer sits at the bottom however few
-   results there are. */
+/* At least a full screen tall, so the footer always starts below the fold,
+   even with no results. The search dock hides once the footer is scrolled
+   into view; if a short results page let the footer show on load, the dock
+   would vanish before the user could change the search. */
 .results {
   flex: 1 0 auto;
+  min-height: 100vh;
 }
 
 @media (max-width: 768px) {

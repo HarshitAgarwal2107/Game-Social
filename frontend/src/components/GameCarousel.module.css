@@ -98,8 +98,10 @@
      SidebarRight.module.css (.toggle width). */
   --rail-w: 32px;
   position: relative;
-  margin-left: calc(var(--page-pad, 0px) * -1);
-  margin-right: calc(var(--page-pad, 0px) * -1);
+  /* A page whose gutters differ left and right (the game page) sets
+     --page-pad-l / --page-pad-r; otherwise both are --page-pad. */
+  margin-left: calc(var(--page-pad-l, var(--page-pad, 0px)) * -1);
+  margin-right: calc(var(--page-pad-r, var(--page-pad, 0px)) * -1);
 }
 
 .carousel {
@@ -119,7 +121,7 @@
      --edge-w and --rail-w are inherited from .rowWrap. No vertical padding:
      the card hover no longer lifts or glows outside its box. */
   padding: 0 max(0px, calc(var(--rail-w, 32px) - (100vw - 100%))) 0
-    max(var(--page-pad, 0px), var(--edge-w, 72px));
+    max(var(--page-pad-l, var(--page-pad, 0px)), var(--edge-w, 72px));
   will-change: scroll-position;
   /* Deliberately no scroll snapping: the row is driven by useCarouselScroll,
      which nudges scrollLeft a few px per frame while the cursor sits near an
@@ -194,6 +196,15 @@
   -webkit-backdrop-filter: blur(12px);
   mask-image: linear-gradient(to right, #000 0%, #000 35%, transparent 70%), var(--fade-y);
   -webkit-mask-image: linear-gradient(to right, #000 0%, #000 35%, transparent 70%), var(--fade-y);
+}
+
+/* The lighter left edge (edge="fade"): the cards fade out under the
+   sidebar through a mask on the row itself. Nothing samples the page
+   behind, so it can't lag a frame behind a scroll and ghost the way
+   stacked backdrop blurs can when several rows sit close together. */
+.carouselFade {
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--edge-w, 72px));
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--edge-w, 72px));
 }
 
 @media (max-width: 1280px) {

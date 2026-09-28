@@ -5,6 +5,8 @@ import { normalizeGames } from "../utils/normalizeGames";
 import { gameArt } from "../utils/gameArt";
 import { scoreColor } from "../utils/scoreColor";
 import PlatformIcon from "./PlatformIcon";
+import ScrollRail from "./game/ScrollRail";
+import rail from "./game/ScrollRail.module.css";
 import styles from "./TrendingSpotlight.module.css";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -43,15 +45,36 @@ function preload(url) {
   img.src = url;
 }
 
+/* The homepage's corner label: the game's trending rank. */
+const trendingKicker = (game) => ({ tag: `#${game.rank}`, text: "Trending on Steam" });
+
 /**
  * Trending as a one-game-at-a-time spotlight: large art on the left, a
  * condensed version of the game page on the right. Data comes entirely from
  * /api/trending (already enriched server-side), so moving between slides
  * costs no requests beyond the images.
+ *
+ * Also the game page's related games: pass `games` (normalized, each with
+ * the fields the slide shows) and nothing is fetched; `title`, `label` (for
+ * screen readers) and `kicker(game, index, total)` -> { tag, text } set the
+ * heading and each slide's corner label; `labelHeading` shows the heading
+ * as a panel label (uppercase, a glowing edge, a count) like the game
+ * page's panels, instead of the homepage's plain section title.
  */
-export default function TrendingSpotlight() {
+export default function TrendingSpotlight({
+  games = null,
+  title = "Trending",
+  label = "Trending games",
+  kicker = trendingKicker,
+  labelHeading = false,
+  // Joy-Cons with a glowing edge in the game's colour (--tint), for the
+  // game page.
+  tintedJoyCons = false,
+} = {}) {
   const navigate = useNavigate();
-  const [slides, setSlides] = useState([]);
+  const [fetched, setFetched] = useState([]);
+  const slides = games ?? fetched;
+  const given = Boolean(games);
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const pointerStart = useRef(null);
@@ -86,6 +109,7 @@ export default function TrendingSpotlight() {
   }, []);
 
   useEffect(() => {
+    if (given) return;
     let cancelled = false;
 
     (async () => {
@@ -102,14 +126,14 @@ export default function TrendingSpotlight() {
           .map((game, i) => ({ ...game, rank: i + 1 }))
           .filter((game) => game.rawgId && game.cover);
 
-        if (!cancelled) setSlides(withRank);
+        if (!cancelled) setFetched(withRank);
       } catch (e) {
         console.error("trending load failed", e);
       }
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [given]);
 
   const go = useCallback((delta) => {
     setDirection(delta);
@@ -153,14 +177,14 @@ export default function TrendingSpotlight() {
     if (Math.abs(dx) > SWIPE_PX) go(dx < 0 ? 1 : -1);
   }
 
-  const game = slides[index];
+  const game = slides[index] ?? slides[0];
 
   return (
     <section
       ref={sectionRef}
       className={styles.section}
       aria-roledescription="carousel"
-      aria-label="Trending games"
+      aria-label={label}
       onKeyDown={onKeyDown}
       // Keyboard focus only: a mouse click on a Joy-Con also leaves focus
       // on it, which would otherwise pause the carousel indefinitely after
@@ -170,10 +194,17 @@ export default function TrendingSpotlight() {
         if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false);
       }}
     >
-      <h2 className={styles.sectionTitle}>Trending</h2>
+      {labelHeading ? (
+        <h2 className={styles.sectionLabel}>
+          {title}
+          {slides.length > 0 && <span className={styles.sectionCount}>{slides.length}</span>}
+        </h2>
+      ) : (
+        <h2 className={styles.sectionTitle}>{title}</h2>
+      )}
 
       <div
-        className={styles.stage}
+        className={`${styles.stage} ${tintedJoyCons ? styles.stageTinted : ""}`}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -196,6 +227,7 @@ export default function TrendingSpotlight() {
               game={game}
               position={index + 1}
               total={slides.length}
+              kicker={kicker(game, index, slides.length)}
               direction={direction}
               // Announcing every automatic change would be noise; only
               // announce while it's paused, i.e. the user is driving.
@@ -239,11 +271,15 @@ export default function TrendingSpotlight() {
   );
 }
 
-function Slide({ game, position, total, direction, live, onOpen, onPointerDown, onPointerUp }) {
+function Slide({ game, position, total, kicker, direction, live, onOpen, onPointerDown, onPointerUp }) {
   const {
-    rank, title, cover, year, developer, genres, platforms,
+    title, cover, year, developer, genres, platforms,
     metacritic, rating, summary, players, steamPositive, steamNegative,
   } = game;
+  // The title and description scroll with the game page's scrollbar
+  // (ScrollRail), shown while hovered or focused.
+  const titleRef = useRef(null);
+  const summaryRef = useRef(null);
 
   const art = gameArt(cover, ART_WIDTH);
 
@@ -278,11 +314,14 @@ function Slide({ game, position, total, direction, live, onOpen, onPointerDown, 
 
       <div className={styles.details}>
         <div className={styles.kicker}>
-          <span className={styles.rank}>#{rank}</span>
-          <span>Trending on Steam</span>
+          <span className={styles.rank}>{kicker.tag}</span>
+          <span>{kicker.text}</span>
         </div>
 
-        <h3 className={styles.title} tabIndex={0} title={title}>{title}</h3>
+        <div className={styles.scrollBox}>
+          <h3 ref={titleRef} className={`${styles.title} ${rail.scroller}`} tabIndex={0} title={title}>{title}</h3>
+          <ScrollRail targetRef={titleRef} className={styles.boxRail} />
+        </div>
 
         {(developer || year) && (
           <div className={styles.byline}>
@@ -317,7 +356,12 @@ function Slide({ game, position, total, direction, live, onOpen, onPointerDown, 
           )}
         </dl>
 
-        {summary && <p className={styles.summary} tabIndex={0}>{summary}</p>}
+        {summary && (
+          <div className={`${styles.scrollBox} ${styles.summaryBox}`}>
+            <p ref={summaryRef} className={`${styles.summary} ${rail.scroller}`} tabIndex={0}>{summary}</p>
+            <ScrollRail targetRef={summaryRef} className={styles.boxRail} />
+          </div>
+        )}
 
         <div className={styles.footer}>
           <div className={styles.tags}>

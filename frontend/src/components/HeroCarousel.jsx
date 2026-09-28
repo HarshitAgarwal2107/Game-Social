@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import * as THREE from "three";
 import { gameArt } from "../utils/gameArt";
 import styles from "./HeroCarousel.module.css";
+import { useQuickLook } from "./quicklook/quickLookContext";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -75,16 +75,17 @@ function wrap(x, period) {
 }
 
 export default function HeroCarousel() {
-  const navigate = useNavigate();
+  const quickLook = useQuickLook();
   const mountRef = useRef(null);
-  const navigateRef = useRef(navigate);
+  const openRef = useRef(null);
   const [games, setGames] = useState([]);
 
-  // Kept in a ref so the WebGL effect doesn't need `navigate` as a dependency
-  // (which would tear down and rebuild the whole scene on every route change).
+  // A card opens the quick look (stepping through the wall's games). Kept in
+  // a ref so the WebGL effect doesn't depend on it (which would tear down and
+  // rebuild the whole scene whenever it changes).
   useEffect(() => {
-    navigateRef.current = navigate;
-  }, [navigate]);
+    openRef.current = (game) => quickLook(game, { list: games });
+  }, [quickLook, games]);
 
   useEffect(() => {
     let cancelled = false;
@@ -272,7 +273,7 @@ export default function HeroCarousel() {
       const hit = pick();
       if (!hit) return;
       const card = rows[hit.userData.row].cards.find((c) => c.mesh === hit);
-      if (card?.game?.id) navigateRef.current(`/game/${card.game.id}`);
+      if (card?.game?.id) openRef.current?.(card.game);
     }
 
     const canvas = renderer.domElement;

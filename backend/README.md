@@ -40,7 +40,7 @@ npm run dev               # nodemon + pino-pretty on port 5000
 | Prefix | File | Purpose |
 |--------|------|---------|
 | `/auth` | authRoutes.js | Login, signup, Google OAuth, Steam OpenID, OTP verification, password reset |
-| `/api` | apiRoutes.js | Steam/RAWG/Epic/Riot API proxies, library, achievements, user search, new releases, GS recommended |
+| `/api` | apiRoutes.js | Steam/RAWG/Epic API proxies, library, achievements, user search, new releases, GS recommended |
 | `/api/gameLookup` | gameLookup.js | PostgreSQL game search by name/slug |
 | `/api/trending` | trending.js | SteamSpy trending games with RAWG enrichment |
 | `/api/reviews` | reviewRoutes.js | Game reviews with four verdicts and pro/con tags |
@@ -205,7 +205,6 @@ All gamiq calls use `GAMIQ_URL` and require `Authorization: Bearer {PIPELINE_API
 | `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth client secret |
 | `STEAM_API_KEY` | Yes | Steam Web API key |
 | `RAWG_API_KEY` | Yes | RAWG API key |
-| `RIOT_API_KEY` | No | Riot Games API key |
 | `EPIC_CLIENT_ID` | No | Epic Games client ID |
 | `EPIC_CLIENT_SECRET` | No | Epic Games client secret |
 | `EPIC_TOKEN_URL` | No | Epic Games OAuth token URL |

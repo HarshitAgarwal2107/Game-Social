@@ -47,6 +47,13 @@ export function envBool(name, fallback) {
 
 export const DEV_MODE = envBool("DEV_MODE", false);
 
+/* Master switch for voice chat, off unless turned on.
+   With it off the voice socket handlers are never registered and the client
+   is told voice is unavailable (GET /api/config), so nothing opens a
+   microphone or a peer connection. Flipping it needs an env change and a
+   restart, not a rebuild. */
+export const VOICE_ENABLED = envBool("VOICE_ENABLED", false);
+
 // REDIS_URL is mandatory: there is no localhost fallback, so a missing value
 // fails loudly instead of quietly pointing at a Redis that isn't there.
 // Only called from code paths that actually construct a client, so DEV_MODE

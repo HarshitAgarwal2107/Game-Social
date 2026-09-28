@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import HeroCarousel from "./components/HeroCarousel";
 import GameSearch from "./components/GameSearch";
 import NewReleases from "./components/NewReleases";
+import Upcoming from "./components/Upcoming";
 import GameSocialRecommended from "./components/GSRecommended";
+import RecommendedForYou from "./components/RecommendedForYou";
 import TrendingSpotlight from "./components/TrendingSpotlight";
 import Footer from "./components/Footer";
 import styles from "./HomePage.module.css";
@@ -30,6 +32,8 @@ export default function HomePage() {
 
       <TrendingSpotlight />
       <NewReleases />
+      <Upcoming />
+      <RecommendedForYou />
       <Footer />
       <div ref={endRef} className={styles.endMarker} aria-hidden="true" />
       <GameSearch hidden={atEnd} />

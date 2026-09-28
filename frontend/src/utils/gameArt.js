@@ -8,8 +8,16 @@
  * Only certain widths are served: 200, 420, 600, 640, 1280 and 1920 work;
  * anything else (1200, 1024, 2560...) answers with a 307 to api.rawg.io and
  * the image never loads.
- * Anything that isn't a /media/games/ URL (screenshots, other hosts) is
- * returned untouched.
+ * Covers (/media/games/) and screenshots (/media/screenshots/, 2560x1440
+ * originals) are resized; anything else (other hosts, already-resized URLs)
+ * is returned untouched.
+ *
+ * This matters for more than bandwidth: every image on screen is decoded to
+ * its full size on the GPU whatever size it's shown at. A 2560x1440
+ * screenshot is ~14MB of GPU memory even as a 136px thumbnail, and the game
+ * page used to show a dozen of those (thumbnails, the viewer, the cycling
+ * hero). A long session ran Chrome's GPU memory down until it stopped
+ * redrawing parts of the page (stale, doubled text).
  *
  * CORS caveat: RAWG sends Access-Control-Allow-Origin only when the request
  * carries an Origin header, and caches for a year. A plain <img> and a CORS
@@ -19,5 +27,5 @@
  */
 export function gameArt(url, width = 640) {
   if (!url) return "";
-  return url.replace("/media/games/", `/media/resize/${width}/-/games/`);
+  return url.replace(/\/media\/(games|screenshots)\//, `/media/resize/${width}/-/$1/`);
 }

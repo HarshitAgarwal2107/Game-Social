@@ -16,6 +16,9 @@ const LIMITS = {
   search: { points: envInt("RATE_LIMIT_SEARCH_POINTS", 20),  duration: envInt("RATE_LIMIT_SEARCH_DURATION", 60),
             burst:  envInt("RATE_LIMIT_SEARCH_BURST", 10) },
   write:  { points: envInt("RATE_LIMIT_WRITE_POINTS", 10),   duration: envInt("RATE_LIMIT_WRITE_DURATION", 15 * 60) },
+  // Review-draft auto-save: the game page saves a couple of seconds after
+  // typing stops, so this has to be far looser than `write`.
+  draft:  { points: envInt("RATE_LIMIT_DRAFT_POINTS", 120),  duration: envInt("RATE_LIMIT_DRAFT_DURATION", 10 * 60) },
   public: { points: envInt("RATE_LIMIT_PUBLIC_POINTS", 150), duration: envInt("RATE_LIMIT_PUBLIC_DURATION", 15 * 60),
             burst:  envInt("RATE_LIMIT_PUBLIC_BURST", 50) },
 };
@@ -163,6 +166,14 @@ function buildLimiters() {
     insuranceLimiter: new RateLimiterMemory(LIMITS.write),
   });
 
+  const draftInstance = new RateLimiterRedis({
+    storeClient: redis,
+    keyPrefix: "rl_draft",
+    points: LIMITS.draft.points,
+    duration: LIMITS.draft.duration,
+    insuranceLimiter: new RateLimiterMemory(LIMITS.draft),
+  });
+
   // ── TIER 3: Token Bucket (public) ──────────────────────────────
 
   const publicInstance = new BurstyRateLimiter(
@@ -187,6 +198,7 @@ function buildLimiters() {
     apiLimiter:        createMiddleware(apiInstance, "Too many requests, please slow down"),
     searchLimiter:     createMiddleware(searchInstance, "Too many search requests, please slow down"),
     writeLimiter:      createMiddleware(writeInstance, "Too many requests, please slow down"),
+    draftLimiter:      createMiddleware(draftInstance, "Saving too often, please slow down"),
     publicLimiter:     createMiddleware(publicInstance, "Rate limit exceeded"),
   };
 }
@@ -202,6 +214,7 @@ function buildPassthroughs() {
     apiLimiter:        passthrough,
     searchLimiter:     passthrough,
     writeLimiter:      passthrough,
+    draftLimiter:      passthrough,
     publicLimiter:     passthrough,
   };
 }
@@ -221,5 +234,6 @@ export const {
   apiLimiter,
   searchLimiter,
   writeLimiter,
+  draftLimiter,
   publicLimiter,
 } = DEV_MODE ? buildPassthroughs() : buildLimiters();

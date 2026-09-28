@@ -150,12 +150,15 @@ function FilterMenu({ label, options, selected, onToggle, onClear, wide = false 
 // initial*: starting values (the /search page passes the current search).
 // live: filter changes open the results page straight away (on /search the
 // page itself is the results, so there's no need to press Enter).
+// suggestions: the as-you-type dropdown. Off on /search, where the page
+// already shows the results; typing there searches on Enter.
 export default function GameSearch({
   hidden = false,
   initialQuery = "",
   initialGenres = [],
   initialPlatforms = [],
   live = false,
+  suggestions = true,
 }) {
   const navigate = useNavigate();
   const containerRef = useRef(null);
@@ -168,6 +171,8 @@ export default function GameSearch({
   const [platforms, setPlatforms] = useState(initialPlatforms);
   const [open, setOpen] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  // Every match, not just the ones loaded ("Showing 15 of 1,408").
+  const [total, setTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const listRef = useRef(null);
   // Bumped per search, so a page that arrives after the query changed is
@@ -179,8 +184,7 @@ export default function GameSearch({
       q: query,
       genres: genres.join(","),
       platforms: platforms.join(","),
-      // One extra row says whether there's another page.
-      limit: String(PAGE_SIZE + 1),
+      limit: String(PAGE_SIZE),
       offset: String(offset)
     });
   }
@@ -189,27 +193,67 @@ export default function GameSearch({
   // prefilled bar on /search doesn't pop its suggestions over the page.
   const touched = useRef(false);
 
-  function submit(q = query) {
+  // replace: swap the current history entry instead of adding one. Used
+  // for live filter changes, so Back doesn't step through every click.
+  function submit(q = query, { replace = false } = {}) {
     const url = searchUrl(q, genres, platforms);
     if (!url) return;
-    setOpen(false);
-    navigate(url);
+    if (!replace) setOpen(false);
+    navigate(url, { replace });
   }
 
-  // On /search, a filter change re-runs the page's search immediately.
+  // On /search, the page follows the bar live: a filter change re-runs the
+  // search at once, and typing does after a short pause (so it's one search
+  // per word, not per key). History is replaced, not added to. Text of 1-2
+  // characters waits, as the dropdown does; the bar stays mounted
+  // throughout, so an open filter menu stays open.
+  const LIVE_TYPING_DELAY = 400;
+  const lastLive = useRef({ query, genres, platforms });
   useEffect(() => {
-    if (live && touched.current) submit();
+    if (!live || !touched.current) return;
+    const prev = lastLive.current;
+    lastLive.current = { query, genres, platforms };
+    const text = query.trim();
+    if (text.length > 0 && text.length < 3) return;
+    const typed = prev.query !== query;
+    const id = setTimeout(
+      () => submit(query, { replace: true }),
+      typed ? LIVE_TYPING_DELAY : 0
+    );
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [genres, platforms]);
+  }, [query, genres, platforms]);
+
+  // Follow the URL when it changes from outside the bar (Back/Forward, a
+  // link). When the bar caused the change the values already match, so this
+  // does nothing. Compared as strings: the page passes fresh arrays each
+  // render.
+  const urlGenres = initialGenres.join(",");
+  const urlPlatforms = initialPlatforms.join(",");
+  useEffect(() => {
+    if (
+      initialQuery === query &&
+      urlGenres === genres.join(",") &&
+      urlPlatforms === platforms.join(",")
+    ) return;
+    // Not a user edit: don't re-submit or pop the dropdown open.
+    touched.current = false;
+    setQuery(initialQuery);
+    setGenres(urlGenres ? urlGenres.split(",") : []);
+    setPlatforms(urlPlatforms ? urlPlatforms.split(",") : []);
+    setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery, urlGenres, urlPlatforms]);
 
   /* ───────── SEARCH FETCH ───────── */
   useEffect(() => {
     // Platform only narrows a search, it isn't one on its own: with no text
     // and no genre, "all PC games" is half the catalogue, so nothing is shown.
     const sid = ++searchId.current;
-    if (query.trim().length < 3 && genres.length === 0) {
+    if (!suggestions || (query.trim().length < 3 && genres.length === 0)) {
       setResults([]);
       setHasMore(false);
+      setTotal(0);
       setOpen(false);
       return;
     }
@@ -231,10 +275,11 @@ export default function GameSearch({
         }
 
         if (!res.ok) return;
-        const data = await res.json();
+        const { total: count, results: rows } = await res.json();
         if (sid !== searchId.current) return;
-        setResults(data.slice(0, PAGE_SIZE));
-        setHasMore(data.length > PAGE_SIZE);
+        setResults(rows);
+        setTotal(count);
+        setHasMore(rows.length < count);
         if (listRef.current) listRef.current.scrollTop = 0;
         if (touched.current) setOpen(true);
       } catch (e) {
@@ -266,10 +311,13 @@ export default function GameSearch({
         return;
       }
       if (!res.ok || sid !== searchId.current) return;
-      const data = await res.json();
+      const { results: rows } = await res.json();
       if (sid !== searchId.current) return;
-      setResults(prev => [...prev, ...data.slice(0, PAGE_SIZE)]);
-      setHasMore(data.length > PAGE_SIZE);
+      setResults(prev => {
+        const next = [...prev, ...rows];
+        setHasMore(rows.length > 0 && next.length < total);
+        return next;
+      });
     } catch (e) {
       console.error(e);
     } finally {
@@ -354,7 +402,11 @@ export default function GameSearch({
               </span>
             </div>
           ))}
-          {loadingMore && <div className={styles.resultMore}>Loading more…</div>}
+          <div className={styles.resultMore}>
+            {loadingMore
+              ? "Loading more…"
+              : `Showing ${results.length.toLocaleString()} of ${total.toLocaleString()} · Enter for all results`}
+          </div>
         </div>
 
         {/* STATUS LINE */}

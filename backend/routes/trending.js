@@ -8,24 +8,12 @@ import {
 } from "../utils/steamRawgmap.js";
 import logger from "../config/logger.js";
 import { ensureSteamAppInfoTable } from "../utils/steamAppInfo.js";
+import { summarize } from "../utils/gameText.js";
 
 const router = express.Router();
 
 const GAMIQ_URL = process.env.GAMIQ_URL || "http://localhost:8000";
 const PIPELINE_API_KEY = process.env.PIPELINE_API_KEY;
-
-/* description_raw is RAWG's markdown-ish text ("###Setting", runs of blank
-   lines). Strip the markup and collapse whitespace for the homepage
-   spotlight. Sent in full, not cut short: the spotlight's description box
-   scrolls, so a truncated "…" would just be a dead end. */
-function summarize(text) {
-  if (!text) return null;
-  return String(text)
-    .replace(/#+\s*/g, "")
-    .replace(/[*_`>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 const toInt = (v, d = 50) => {
   const n = Number(v);
